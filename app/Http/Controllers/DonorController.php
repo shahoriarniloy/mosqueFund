@@ -2,6 +2,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Donor;
+use App\Models\Month;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -40,7 +42,7 @@ class DonorController extends Controller implements HasMiddleware
             $query->where('status', $request->status);
         }
 
-        $donors = $query->latest()->paginate(10);
+        $donors = $query->paginate(10);
         
         // Get statistics
         $totalDonors = Donor::count();
@@ -69,19 +71,56 @@ class DonorController extends Controller implements HasMiddleware
      * Store a newly created donor in storage.
      */
     public function store(Request $request)
+{
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'phone' => 'required|string|unique:donors,phone',
+        'address' => 'nullable|string',
+        'monthly_amount' => 'required|numeric|min:0',
+        'status' => 'required|in:active,inactive'
+    ]);
+
+    // Add the created_by field with the current authenticated user's ID
+    $validated['created_by'] = auth()->id();
+
+    Donor::create($validated);
+
+    return redirect()->route('donors.index')
+        ->with('success', 'Donor created successfully.');
+}
+
+
+private function getMonthsInRange($startDate, $endDate)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'required|string|unique:donors,phone',
-            'address' => 'nullable|string',
-            'monthly_amount' => 'required|numeric|min:0',
-            'status' => 'required|in:active,inactive'
-        ]);
+        $months = collect();
+        
+        $start = \Carbon\Carbon::parse($startDate)->startOfMonth();
+        $end = \Carbon\Carbon::parse($endDate)->startOfMonth();
+        
+        while ($start <= $end) {
+            $month = Month::where('year', $start->year)
+                ->where('name', $start->format('F'))
+                ->first();
+            
+            if ($month) {
+                $months->push($month);
+            }
+            
+            $start->addMonth();
+        }
+        
+        return $months;
+    }
 
-        Donor::create($validated);
-
-        return redirect()->route('donors.index')
-            ->with('success', 'Donor created successfully.');
+    private function getMonthNumber($monthName)
+    {
+        $months = [
+            'January' => 1, 'February' => 2, 'March' => 3, 'April' => 4,
+            'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8,
+            'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12
+        ];
+        
+        return $months[$monthName] ?? 1;
     }
 
     /**
@@ -100,7 +139,76 @@ class DonorController extends Controller implements HasMiddleware
             ->where('paid_status', 'paid')
             ->sum('amount');
         
-        $totalDue = $donor->monthly_amount * 12 - $totalPaid; // Simple calculation
+        $totalDue = 0; // Simple calculation
+
+
+        // Due Payment
+        $currentDate = now();
+        $creationDate = \Carbon\Carbon::parse($donor->created_at);
+        
+        // Get all months from creation date to current date
+        $months = $this->getMonthsInRange($creationDate, $currentDate);
+        
+        // Get paid months for this donor
+        $paidMonthIds = Transaction::where('donor_id', $donor->id)
+            ->where('paid_status', 'paid')
+            ->pluck('month_id')
+            ->toArray();
+        
+        // Get unpaid transactions
+        $unpaidTransactions = Transaction::where('donor_id', $donor->id)
+            ->where('paid_status', 'unpaid')
+            ->with('month')
+            ->get();
+        
+        $unpaidMonthIds = $unpaidTransactions->pluck('month_id')->toArray();
+        
+        $dueMonths = [];
+        $totalDue = 0;
+        
+        foreach ($months as $month) {
+            // Check if this month is paid
+            if (in_array($month->id, $paidMonthIds)) {
+                continue;
+            }
+            
+            // Check if this month is already recorded as unpaid in transactions
+            if (in_array($month->id, $unpaidMonthIds)) {
+                // Find the transaction for this month
+                $transaction = $unpaidTransactions->firstWhere('month_id', $month->id);
+                $dueDate = \Carbon\Carbon::create($month->year, $this->getMonthNumber($month->name), 1);
+                $daysOverdue = $dueDate->isPast() ? $dueDate->diffInDays(now()) : 0;
+                
+                $dueMonths[] = [
+                    'month' => $month,
+                    'amount' => $transaction->amount,
+                    'due_date' => $dueDate,
+                    'days_overdue' => $daysOverdue,
+                    'transaction_id' => $transaction->id
+                ];
+                
+                $totalDue += $transaction->amount;
+            } else {
+                // This month is unpaid and no transaction record exists
+                $dueDate = \Carbon\Carbon::create($month->year, $this->getMonthNumber($month->name), 1);
+                $daysOverdue = $dueDate->isPast() ? $dueDate->diffInDays(now()) : 0;
+                
+                $dueMonths[] = [
+                    'month' => $month,
+                    'amount' => $donor->monthly_amount,
+                    'due_date' => $dueDate,
+                    'days_overdue' => $daysOverdue,
+                    'transaction_id' => null
+                ];
+                
+                $totalDue += $donor->monthly_amount;
+            }
+        }
+        
+
+
+
+        // End due
         
         // Calculate payment rate
         $totalExpected = $donor->monthly_amount * 12;

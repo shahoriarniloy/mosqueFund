@@ -35,15 +35,16 @@
                                 <label for="donor_id" class="form-label" style="font-size: 0.9rem; font-weight: 500; color: #334155; margin-bottom: 6px;">
                                     Select Donor <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select @error('donor_id') is-invalid @enderror" 
+                                <select class="form-select tom-select @error('donor_id') is-invalid @enderror" 
                                         id="donor_id" name="donor_id" required
                                         style="border-radius: 40px; padding: 10px 16px; border: 1px solid #e2e8f0; background: white; font-size: 0.95rem;">
-                                    <option value="">Choose a donor</option>
+                                    <option value="">Search donor by name or phone...</option>
                                     @foreach($donors as $donor)
                                         <option value="{{ $donor->id }}" 
                                                 data-monthly="{{ $donor->monthly_amount }}"
+                                                data-phone="{{ $donor->phone }}"
                                                 {{ old('donor_id', request('donor_id')) == $donor->id ? 'selected' : '' }}>
-                                            {{ $donor->name }} (৳{{ number_format($donor->monthly_amount, 2) }}/month)
+                                            {{ $donor->name }} - {{ $donor->phone }} (৳{{ number_format($donor->monthly_amount, 2) }}/month)
                                         </option>
                                     @endforeach
                                 </select>
@@ -56,7 +57,6 @@
                                     <small class="text-secondary d-block" style="font-size: 0.65rem;">MONTHLY COMMITMENT</small>
                                     <div class="d-flex align-items-center justify-content-between">
                                         <span class="fw-bold" style="color: #2563eb; font-size: 1rem;">৳<span id="selectedMonthlyAmount">0.00</span></span>
-                                        <span class="badge" style="background: #dbeafe; color: #1e40af; font-size: 0.6rem;">Auto-filled</span>
                                     </div>
                                 </div>
                             </div>
@@ -70,7 +70,10 @@
                                         style="border-radius: 40px; padding: 10px 16px; border: 1px solid #e2e8f0; background: white; font-size: 0.95rem;">
                                     <option value="">Choose a month</option>
                                     @foreach($months as $month)
-                                        <option value="{{ $month->id }}" {{ old('month_id') == $month->id ? 'selected' : '' }}>
+                                        <option value="{{ $month->id }}" 
+                                                data-year="{{ $month->year }}"
+                                                data-month-name="{{ $month->name }}"
+                                                {{ old('month_id') == $month->id ? 'selected' : '' }}>
                                             {{ $month->name }} {{ $month->year }}
                                         </option>
                                     @endforeach
@@ -90,17 +93,27 @@
                                     <span class="input-group-text" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 40px 0 0 40px; border-right: none; color: #475569;">৳</span>
                                     <input type="number" step="0.01" class="form-control @error('amount') is-invalid @enderror" 
                                            id="amount" name="amount" value="{{ old('amount') }}" 
-                                           placeholder="Amount will auto-fill" 
-                                           style="border-radius: 0 40px 40px 0; padding: 10px 16px; border: 1px solid #e2e8f0; background: #f1f5f9; font-size: 0.95rem; color: #1e293b;" 
-                                           readonly>
+                                           placeholder="Enter amount" 
+                                           style="border-radius: 0 40px 40px 0; padding: 10px 16px; border: 1px solid #e2e8f0; background: white; font-size: 0.95rem;" 
+                                           required>
                                 </div>
                                 @error('amount')
                                     <div class="invalid-feedback" style="font-size: 0.8rem; margin-top: 4px;">{{ $message }}</div>
                                 @enderror
                                 <small class="text-secondary d-block mt-1" style="font-size: 0.7rem;">
                                     <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
-                                    Amount is fixed based on donor's monthly commitment
+                                    Enter any amount. Excess over monthly commitment will be recorded as donation
                                 </small>
+                                
+                                <!-- Excess Amount Info -->
+                                <div id="excessAmountInfo" class="mt-2 p-2 rounded-3" style="background: #eef2ff; border: 1px solid #c7d2fe; display: none;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fas fa-gift" style="color: #2563eb;"></i>
+                                        <small class="text-primary">
+                                            <span id="excessAmount">0.00</span> will be recorded as donation
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
                             
                             <div class="col-md-6">
@@ -110,8 +123,7 @@
                                 <select class="form-select @error('payment_method') is-invalid @enderror" 
                                         id="payment_method" name="payment_method" required
                                         style="border-radius: 40px; padding: 10px 16px; border: 1px solid #e2e8f0; background: white; font-size: 0.95rem;">
-                                    <option value="">Select method</option>
-                                    <option value="cash" {{ old('payment_method') == 'cash' ? 'selected' : '' }}>Cash</option>
+                                    <option value="cash" {{ old('payment_method', 'cash') == 'cash' ? 'selected' : '' }}>Cash</option>
                                     <option value="bkash" {{ old('payment_method') == 'bkash' ? 'selected' : '' }}>bKash</option>
                                     <option value="nagad" {{ old('payment_method') == 'nagad' ? 'selected' : '' }}>Nagad</option>
                                 </select>
@@ -121,21 +133,8 @@
                             </div>
                         </div>
                         
-                        <!-- Payment Status Display (Always Paid) -->
+                        <!-- Transaction Date -->
                         <div class="row g-3 mb-4">
-                            <div class="col-md-6">
-                                <label class="form-label" style="font-size: 0.9rem; font-weight: 500; color: #334155; margin-bottom: 6px;">
-                                    Payment Status
-                                </label>
-                                <div class="form-control" style="background: #f1f5f9; border-radius: 40px; padding: 10px 16px; border: 1px solid #e2e8f0; color: #10b981; font-weight: 600; display: flex; align-items: center; gap: 8px;" readonly>
-                                    <i class="fas fa-check-circle"></i> Paid
-                                </div>
-                                <small class="text-secondary d-block mt-1" style="font-size: 0.7rem;">
-                                    <i class="fas fa-info-circle me-1" style="color: #2563eb;"></i>
-                                    Transactions are always recorded as paid
-                                </small>
-                            </div>
-                            
                             <div class="col-md-6">
                                 <label class="form-label" style="font-size: 0.9rem; font-weight: 500; color: #334155; margin-bottom: 6px;">
                                     Transaction Date
@@ -156,6 +155,7 @@
                                 <div>
                                     <strong style="color: #1e40af; font-size: 0.9rem;">Transaction Summary:</strong><br>
                                     <span id="summaryText" style="color: #1e293b; font-size: 0.85rem;">Select a donor and month</span>
+                                    <span id="donationSummary" style="color: #10b981; font-size: 0.8rem; display: none; margin-top: 4px;"></span>
                                 </div>
                             </div>
                         </div>
@@ -163,12 +163,12 @@
                         <hr style="border-top: 1px dashed #e2e8f0; margin: 24px 0;">
                         
                         <!-- Form Actions -->
-                        <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
-                            <a href="{{ route('transactions.index') }}" class="btn w-100 w-sm-auto" style="background: #f1f5f9; color: #475569; border: none; border-radius: 40px; padding: 10px 24px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                        <div class="d-flex flex-row flex-row justify-content-end gap-2">
+                            <a href="{{ route('transactions.index') }}" class="btn w-100 w-sm-auto" style="background: #ef1010;; color: white; border: none; border-radius: 40px; padding: 10px 24px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
                                 <i class="fas fa-times"></i> Cancel
                             </a>
                             <button type="submit" class="btn w-100 w-sm-auto" style="background: linear-gradient(145deg, #2563eb, #1d4ed8); color: white; border: none; border-radius: 40px; padding: 10px 24px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 10px 20px -8px rgba(37,99,235,0.4);">
-                                <i class="fas fa-save me-2"></i>Save Transaction
+                                <i class="fas fa-save me-2"></i>Save 
                             </button>
                         </div>
                     </form>
@@ -178,12 +178,58 @@
     </div>
 </div>
 
+<!-- Include Tom Select CSS and JS -->
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
 <style>
 /* Form focus states */
 .form-control:focus, .form-select:focus {
     border-color: #2563eb !important;
     box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important;
     outline: none;
+}
+
+/* Tom Select Customization */
+.ts-wrapper.form-select {
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+.ts-control {
+    border-radius: 40px !important;
+    padding: 8px 16px !important;
+    border: 1px solid #e2e8f0 !important;
+    min-height: 45px;
+    box-shadow: none !important;
+}
+
+.ts-control input {
+    font-size: 0.95rem !important;
+}
+
+.ts-dropdown {
+    border-radius: 16px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1) !important;
+}
+
+.ts-dropdown .option {
+    padding: 10px 16px !important;
+    font-size: 0.9rem !important;
+}
+
+.ts-dropdown .active {
+    background: #eef2ff !important;
+    color: #2563eb !important;
+}
+
+/* Disabled option styling */
+select option:disabled {
+    background-color: #f1f5f9 !important;
+    color: #94a3b8 !important;
+    font-style: italic;
 }
 
 /* Mobile optimizations */
@@ -200,15 +246,9 @@
         min-height: 44px;
     }
     
-    /* Better touch targets */
     .form-control, .form-select {
-        font-size: 16px !important; /* Prevents zoom on iOS */
+        font-size: 16px !important;
         padding: 12px 16px !important;
-    }
-    
-    .btn-check + .btn {
-        padding: 12px 8px !important;
-        font-size: 0.85rem !important;
     }
 }
 
@@ -217,82 +257,196 @@
     transform: translateY(-2px);
     transition: all 0.2s;
 }
-
-.btn-check + .btn:hover {
-    background: #eef2ff !important;
-    border-color: #2563eb !important;
-    color: #1e293b !important;
-}
-
-.btn-check:checked + .btn:hover {
-    filter: brightness(1.1) !important;
-}
-
-/* Read-only amount field styling */
-#amount[readonly] {
-    background: #f1f5f9;
-    color: #1e293b;
-    font-weight: 500;
-}
 </style>
 
 @push('scripts')
 <script>
     $(document).ready(function() {
-        // Update amount when donor is selected
-        $('#donor_id').on('change', function() {
-            var selected = $(this).find('option:selected');
-            var monthlyAmount = selected.data('monthly') || 0;
-            
-            console.log('Donor changed:', selected.val(), 'Monthly amount:', monthlyAmount); // Debug log
-            
-            if (selected.val()) {
-                // Set amount field to monthly amount
-                $('#amount').val(monthlyAmount);
-                $('#selectedMonthlyAmount').text(parseFloat(monthlyAmount).toFixed(2));
-                $('#monthlyAmountDisplay').slideDown(200);
-                
-                // Also set the old amount value for form submission
-                $('#amount').val(monthlyAmount);
-            } else {
-                $('#amount').val('');
-                $('#monthlyAmountDisplay').slideUp(200);
+        const monthSelect = document.getElementById('month_id');
+        let monthlyCommitment = 0;
+
+        // Store original month options
+        const originalOptions = [];
+        for (let i = 0; i < monthSelect.options.length; i++) {
+            originalOptions.push({
+                value: monthSelect.options[i].value,
+                text: monthSelect.options[i].text
+            });
+        }
+
+        // Initialize Tom Select for donor
+        const donorSelect = new TomSelect('#donor_id', {
+            create: false,
+            sortField: {
+                field: 'text',
+                direction: 'asc'
+            },
+            searchField: ['text'],
+            onChange: function(value) {
+                if (value) {
+                    const selected = donorSelect.options[value];
+                    monthlyCommitment = parseFloat(selected.monthly) || 0;
+
+                    $('#selectedMonthlyAmount').text(monthlyCommitment.toFixed(2));
+                    $('#monthlyAmountDisplay').slideDown(200);
+
+                    checkPaidMonths(value);
+                    calculateExcess();
+                } else {
+                    monthlyCommitment = 0;
+                    $('#selectedMonthlyAmount').text('0.00');
+                    $('#monthlyAmountDisplay').slideUp(200);
+                    resetMonthOptions();
+                    $('#excessAmountInfo').slideUp(200);
+                }
+
+                updateSummary();
             }
+        });
+
+        // Add custom donor data
+        @foreach($donors as $donor)
+            if (donorSelect.options['{{ $donor->id }}']) {
+                donorSelect.options['{{ $donor->id }}'].monthly = '{{ $donor->monthly_amount }}';
+                donorSelect.options['{{ $donor->id }}'].phone = '{{ $donor->phone }}';
+            }
+        @endforeach
+
+        function checkPaidMonths(donorId) {
+            $.ajax({
+                url: '{{ route("transactions.getPaidMonths") }}',
+                type: 'GET',
+                data: { donor_id: donorId },
+                success: function(response) {
+                    if (response.success) {
+                        updateMonthOptions(response.paid_months);
+                    }
+                },
+                error: function(xhr) {
+                    console.error(xhr.responseText);
+                }
+            });
+        }
+
+        function updateMonthOptions(paidMonths) {
+            const currentSelected = $('#month_id').val();
+            monthSelect.innerHTML = '';
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.text = 'Choose a month';
+            monthSelect.appendChild(defaultOption);
+
+            originalOptions.forEach(function(opt) {
+                if (!opt.value) return;
+
+                const option = document.createElement('option');
+                option.value = opt.value;
+
+                const monthId = parseInt(opt.value);
+
+                if (paidMonths.includes(monthId)) {
+                    option.text = opt.text + ' (Paid)';
+                    option.disabled = true;
+                } else {
+                    option.text = opt.text;
+                }
+
+                if (currentSelected == opt.value && !option.disabled) {
+                    option.selected = true;
+                }
+
+                monthSelect.appendChild(option);
+            });
+
+            updateSummary();
+        }
+
+        function resetMonthOptions() {
+            const currentSelected = $('#month_id').val();
+            monthSelect.innerHTML = '';
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.text = 'Choose a month';
+            monthSelect.appendChild(defaultOption);
+
+            originalOptions.forEach(function(opt) {
+                if (!opt.value) return;
+
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.text = opt.text;
+
+                if (currentSelected == opt.value) {
+                    option.selected = true;
+                }
+
+                monthSelect.appendChild(option);
+            });
+
+            updateSummary();
+        }
+
+        function calculateExcess() {
+            const amount = parseFloat($('#amount').val()) || 0;
             
+            if (monthlyCommitment > 0 && amount > 0) {
+                if (amount > monthlyCommitment) {
+                    const excess = amount - monthlyCommitment;
+                    $('#excessAmount').text(excess.toFixed(2));
+                    $('#excessAmountInfo').slideDown(200);
+                    
+                    // Update summary with donation info
+                    const donorId = $('#donor_id').val();
+                    const donor = donorId ? donorSelect.options[donorId] : null;
+                    const monthText = $('#month_id option:selected').text().replace(' (Paid)', '');
+                    
+                    if (donor && donor.text && monthText && monthText !== 'Choose a month') {
+                        $('#donationSummary').html(`<i class="fas fa-gift me-1"></i> Includes ৳${excess.toFixed(2)} as donation`).show();
+                    }
+                } else {
+                    $('#excessAmountInfo').slideUp(200);
+                    $('#donationSummary').hide();
+                }
+            } else {
+                $('#excessAmountInfo').slideUp(200);
+                $('#donationSummary').hide();
+            }
+        }
+
+        $('#amount').on('input', function() {
+            calculateExcess();
             updateSummary();
         });
-        
+
         $('#month_id').on('change', function() {
             updateSummary();
         });
-        
+
         function updateSummary() {
-            var donor = $('#donor_id option:selected').text();
-            var month = $('#month_id option:selected').text();
-            var amount = $('#amount').val();
-            
-            if (donor && donor !== 'Choose a donor' && month && month !== 'Choose a month') {
-                var donorName = donor.split(' (')[0];
-                var summary = 'Transaction for ' + donorName + ' for ' + month;
-                if (amount) {
-                    summary += ' of ৳' + parseFloat(amount).toFixed(2);
-                }
+            const donorId = $('#donor_id').val();
+            const donor = donorId ? donorSelect.options[donorId] : null;
+            const monthText = $('#month_id option:selected').text().replace(' (Paid)', '');
+            const amount = parseFloat($('#amount').val()) || 0;
+
+            if (donor && donor.text && monthText && monthText !== 'Choose a month' && amount > 0) {
+                const donorName = donor.text.split(' - ')[0];
+                let summary = 'Transaction for ' + donorName + ' for ' + monthText;
+                summary += ' of ৳' + amount.toFixed(2);
                 summary += ' - Paid';
                 $('#summaryText').text(summary);
             } else {
-                $('#summaryText').text('Select a donor and month to see summary');
+                $('#summaryText').text('Select a donor, month and enter amount to see summary');
             }
         }
-        
-        // Trigger change on page load if donor is pre-selected (for edit mode)
-        if ($('#donor_id').val()) {
-            console.log('Pre-selected donor found, triggering change');
-            $('#donor_id').trigger('change');
-        }
-        
-        // For debugging - check if amount field exists
-        console.log('Amount field exists:', $('#amount').length > 0);
-        console.log('Donor dropdown exists:', $('#donor_id').length > 0);
+
+        // Pre-fill old values if any
+        @if(old('donor_id'))
+            setTimeout(function() {
+                donorSelect.setValue('{{ old('donor_id') }}');
+            }, 300);
+        @endif
     });
 </script>
 @endpush

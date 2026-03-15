@@ -1,63 +1,56 @@
 <?php
-// app/Http/Controllers/Auth/RegisterController.php
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\RegistrationLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Routing\Controllers\HasMiddleware;
-use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Foundation\Validation\ValidatesRequests;
 
-class RegisterController extends Controller implements HasMiddleware
+class RegisterController extends Controller
 {
-    /**
-     * Where to redirect users after registration.
-     */
+    use ValidatesRequests;
+
+  
     protected $redirectTo = '/dashboard';
 
-    /**
-     * Get the middleware that should be assigned to the controller.
-     */
-    public static function middleware(): array
+    
+    protected $registrationLog;
+
+   
+    public function __construct(RegistrationLogService $registrationLog)
     {
-        return [
-            new Middleware('guest'),
-        ];
+        $this->registrationLog = $registrationLog;
     }
 
-    /**
-     * Show the application registration form.
-     */
+    
     public function showRegistrationForm()
     {
         return view('auth.register');
     }
 
-    /**
-     * Handle a registration request for the application.
-     */
+    
     public function register(Request $request)
     {
-        // Validate the request
-        $request->validate([
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'unique:users'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:4', 'confirmed'],
         ]);
 
-        // Create the user
         $user = User::create([
-            'name' => $request->name,
-            'phone' => $request->phone,
-            'password' => Hash::make($request->password),
+            'name' => $validated['name'],
+            'phone' => $validated['phone'],
+            'password' => Hash::make($validated['password']),
         ]);
 
-        // Log the user in
+        $this->registrationLog->logSuccess($request, $user);
+
         Auth::login($user);
 
-        // Redirect to dashboard
-        return redirect($this->redirectTo);
+        return redirect()->route('dashboard')
+            ->with('success', 'Registration successful! Welcome to MosqueFund.');
     }
 }

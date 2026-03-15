@@ -105,11 +105,11 @@
                                 </button>
                             </div>
                             
-                            <div class="text-center">
+                            {{-- <div class="text-center">
                                 <p class="mb-0">Already have an account? 
                                     <a href="{{ route('login') }}" class="text-decoration-none">Login here</a>
                                 </p>
-                            </div>
+                            </div> --}}
                         </form>
                     </div>
                 </div>

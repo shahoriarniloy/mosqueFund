@@ -11,7 +11,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('donor_id')->constrained()->onDelete('cascade');
             $table->foreignId('month_id')->constrained()->onDelete('cascade');
-            $table->decimal('amount', 10, 2);
+            $table->integer('amount');
             $table->enum('paid_status', ['paid', 'unpaid'])->default('unpaid');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->enum('payment_method', ['bkash', 'nagad', 'cash'])->default('cash');

@@ -13,9 +13,7 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class DashboardController extends Controller implements HasMiddleware
 {
-    /**
-     * Get the middleware that should be assigned to the controller.
-     */
+   
     public static function middleware(): array
     {
         return [
@@ -98,23 +96,19 @@ class DashboardController extends Controller implements HasMiddleware
                               ->where('paid_status', 'paid')
                               ->sum('amount');
         
-        // Collection Rate
         $totalExpected = $activeDonors * 12 * (Donor::avg('monthly_amount') ?? 0);
         $collectionRate = $totalExpected > 0 ? round(($totalCollected / $totalExpected) * 100, 1) : 0;
         
-        // Recent Transactions (for activity feed)
         $recentTransactions = Transaction::with(['donor', 'month', 'user'])
                                ->latest()
                                ->take(5)
                                ->get();
         
-        // Basic Statistics (keeping for backward compatibility)
         $totalDonors = $donorsCount;
         $totalTransactions = $transactionsCount;
         $currentMonthCollection = $monthlyCollected;
         $currentMonthTransactions = $thisMonthPaid + $thisMonthUnpaid;
         
-        // Monthly Collection by Month (for chart)
         $monthlyCollection = Transaction::join('months', 'transactions.month_id', '=', 'months.id')
             ->where('months.year', $currentYear)
             ->where('paid_status', 'paid')
@@ -126,13 +120,11 @@ class DashboardController extends Controller implements HasMiddleware
             ->orderBy('months.id')
             ->get();
         
-        // Payment Method Distribution
         $paymentMethods = Transaction::where('paid_status', 'paid')
             ->select('payment_method', DB::raw('COUNT(*) as count'), DB::raw('SUM(amount) as total'))
             ->groupBy('payment_method')
             ->get();
         
-        // Top Donors
         $topDonors = Transaction::where('paid_status', 'paid')
             ->with('donor')
             ->select('donor_id', DB::raw('SUM(amount) as total_paid'))
@@ -141,7 +133,6 @@ class DashboardController extends Controller implements HasMiddleware
             ->take(5)
             ->get();
         
-        // Due Donors (donors who haven't paid for current month)
         $currentMonth = now()->format('F');
         $currentMonthId = Month::where('name', $currentMonth)
             ->where('year', $currentYear)
@@ -158,7 +149,6 @@ class DashboardController extends Controller implements HasMiddleware
             ->take(5)
             ->get();
         
-        // Yearly Comparison
         $lastYear = $currentYear - 1;
         
         $yearlyComparison = [
@@ -171,32 +161,26 @@ class DashboardController extends Controller implements HasMiddleware
         ];
         
         return view('dashboard', compact(
-            // Donors
             'donorsCount',
             'activeDonors',
             'totalDonors',
             
-            // Months
             'monthsCount',
             'activeMonths',
             
-            // Transactions
             'transactionsCount',
             'totalTransactionAmount',
             'totalTransactions',
             
-            // Donations
             'donationsCount',
             'totalDonationAmount',
             
-            // Collection
             'totalCollected',
             'pendingAmount',
             'pendingCount',
             'overdueCount',
             'collectionRate',
             
-            // This Month
             'thisMonthTotal',
             'thisMonthPaid',
             'thisMonthUnpaid',
@@ -204,7 +188,6 @@ class DashboardController extends Controller implements HasMiddleware
             'currentMonthCollection',
             'currentMonthTransactions',
             
-            // Charts & Reports
             'monthlyCollection',
             'paymentMethods',
             'topDonors',
@@ -212,15 +195,12 @@ class DashboardController extends Controller implements HasMiddleware
             'dueDonors',
             'yearlyComparison',
             
-            // Current
             'currentMonth',
             'currentYear'
         ));
     }
 
-    /**
-     * Get chart data (AJAX)
-     */
+   
     public function getChartData(Request $request)
     {
         $year = $request->get('year', now()->year);
@@ -239,13 +219,10 @@ class DashboardController extends Controller implements HasMiddleware
         return response()->json($data);
     }
 
-    /**
-     * Export dashboard report
-     */
+   
     public function exportReport(Request $request)
     {
-        // Implementation for exporting reports (PDF/Excel)
-        // This would require additional packages like Laravel Excel or DomPDF
+        
         return back()->with('info', 'Export feature coming soon!');
     }
 }

@@ -73,7 +73,7 @@
     </div>
 
     <!-- Filter Section -->
-    <div class="content-card mb-3" style="border-radius: 16px; background: white;">
+    <div class=" mb-3" style="border-radius: 16px; background: white;">
         <div class="p-3">
             <form action="{{ route('donation-logs.index') }}" method="GET" class="row g-2">
                 <div class="col-12 col-md-2">
@@ -126,7 +126,7 @@
     </div>
 
     <!-- Logs Table -->
-    <div class="content-card" style="border-radius: 24px; overflow: hidden; background: white;">
+    <div class="" style="border-radius: 24px; overflow: hidden; background: white;">
         <div class="px-4 py-3" style="background: linear-gradient(145deg, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0;">
             <div class="d-flex align-items-center justify-content-between">
                 <h5 class="mb-0" style="font-weight: 600; color: #1e293b; font-size: 1rem;">

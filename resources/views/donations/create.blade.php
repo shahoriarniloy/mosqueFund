@@ -132,7 +132,7 @@
                         </div>
                         
                         <div class="row g-3 mb-4">
-                            <div class="col-md-6">
+                            {{-- <div class="col-md-6">
                                 <label for="paid_status" class="form-label" style="font-size: 0.9rem; font-weight: 500; color: #334155; margin-bottom: 6px;">
                                     Payment Status
                                 </label>
@@ -145,7 +145,7 @@
                                 @error('paid_status')
                                     <div class="invalid-feedback" style="font-size: 0.8rem; margin-top: 4px;">{{ $message }}</div>
                                 @enderror
-                            </div>
+                            </div> --}}
                             
                             <div class="col-md-6">
                                 <label for="notes" class="form-label" style="font-size: 0.9rem; font-weight: 500; color: #334155; margin-bottom: 6px;">
@@ -165,7 +165,7 @@
                         
                         <!-- Form Actions -->
                         <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
-                            <a href="{{ route('donations.index') }}" class="btn w-100 w-sm-auto" style="background: #f1f5f9; color: #475569; border: none; border-radius: 40px; padding: 10px 24px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                            <a href="{{ route('donations.index') }}" class="btn w-100 w-sm-auto" style="background: #ef1010; color: white; border: none; border-radius: 40px; padding: 10px 24px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
                                 Cancel
                             </a>
                             <button type="submit" class="btn w-100 w-sm-auto" style="background: linear-gradient(145deg, #2563eb, #1d4ed8); color: white; border: none; border-radius: 40px; padding: 10px 24px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 10px 20px -8px rgba(37,99,235,0.4);">
@@ -302,58 +302,66 @@ $(document).ready(function() {
                 _token: '{{ csrf_token() }}'
             },
             success: function(response) {
-                $('#lookupSpinner').hide();
-                $('#checkDonorBtn').prop('disabled', false);
+    $('#lookupSpinner').hide();
+    $('#checkDonorBtn').prop('disabled', false);
 
-                if (response.success) {
-                    // Donor found - auto-fill and set donor_id
-                    currentDonorId = response.donor.id;
-                    $('#donor_id').val(response.donor.id);
-                    $('#name').val(response.donor.name);
-                    $('#phone').val(response.donor.phone);
-                    
-                    // Store the phone that was successfully checked
-                    lastCheckedPhone = phone;
-                    
-                    $('#lookupResult').html(`
-                        <div class="donor-found">
-                            <i class="fas fa-check-circle"></i>
-                            <div>
-                                <strong>Donor Found!</strong><br>
-                                Name: ${response.donor.name}<br>
-                                Phone: ${response.donor.phone}
-                            </div>
-                        </div>
-                    `).show();
-
-                    // Highlight the fields
-                    $('#name, #phone').addClass('border-success');
-                    setTimeout(() => {
-                        $('#name, #phone').removeClass('border-success');
-                    }, 2000);
-                } else {
-                    // Donor not found - clear donor_id but auto-fill phone field
-                    currentDonorId = null;
-                    $('#donor_id').val('');
-                    
-                    // Auto-fill the phone field with the lookup number
-                    $('#phone').val(phone);
-                    
-                    $('#lookupResult').html(`
-                        <div class="donor-not-found">
-                            <i class="fas fa-info-circle"></i>
-                            <div>
-                                <strong>New Donor</strong><br>
-                                No existing donor found with this number.<br>
-                                Phone number has been auto-filled. You can enter name or leave it empty.
-                            </div>
-                        </div>
-                    `).show();
-                    
-                    // Reset last checked phone since no match found
-                    lastCheckedPhone = '';
-                }
-            },
+    if (response.success) {
+        if (response.type === 'donor') {
+            // For monthly donor - set donor_id
+            $('#donor_id').val(response.donor.id);
+            $('#name').val(response.donor.name);
+            $('#phone').val(response.donor.phone);
+            
+            $('#lookupResult').html(`
+                <div class="donor-found">
+                    <i class="fas fa-check-circle"></i>
+                    <div>
+                        <strong>Monthly Donor Found!</strong><br>
+                        Name: ${response.donor.name}<br>
+                        Phone: ${response.donor.phone}
+                    </div>
+                </div>
+            `).show();
+        } else {
+            // For random donor/contributor - set donor_id to empty string
+            $('#donor_id').val(''); // Empty string, will be converted to null in controller
+            $('#name').val(response.donor.name);
+            $('#phone').val(response.donor.phone);
+            
+            $('#lookupResult').html(`
+                <div class="donor-found">
+                    <i class="fas fa-check-circle"></i>
+                    <div>
+                        <strong>Random Donor Found!</strong><br>
+                        Name: ${response.donor.name}<br>
+                        Phone: ${response.donor.phone}<br>
+                        <small>Will be saved as contributor</small>
+                    </div>
+                </div>
+            `).show();
+        }
+        
+        lastCheckedPhone = phone;
+    } else {
+        // Donor not found - clear donor_id
+        $('#donor_id').val('');
+        $('#name').val('');
+        $('#phone').val(phone);
+        
+        $('#lookupResult').html(`
+            <div class="donor-not-found">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <strong>New Donor</strong><br>
+                    No existing donor found with this number.<br>
+                    Phone number has been auto-filled. You can enter name or leave it empty.
+                </div>
+            </div>
+        `).show();
+        
+        lastCheckedPhone = '';
+    }
+},
             error: function(xhr) {
                 $('#lookupSpinner').hide();
                 $('#checkDonorBtn').prop('disabled', false);

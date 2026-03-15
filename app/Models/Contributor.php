@@ -13,13 +13,13 @@ class Contributor extends Model
     protected $fillable = [
         'name',
         'phone',
-        'total_amount',
+        'amount',
         'donation_count',
         'last_donation_at'
     ];
 
     protected $casts = [
-        'total_amount' => 'decimal:2',
+        'total_amount' => 'integer',
         'donation_count' => 'integer',
         'last_donation_at' => 'datetime'
     ];
@@ -29,7 +29,7 @@ class Contributor extends Model
      */
     public function updateStats($donationAmount)
     {
-        $this->total_amount += $donationAmount;
+        $this->amount += $donationAmount;
         $this->donation_count += 1;
         $this->last_donation_at = now();
         $this->save();

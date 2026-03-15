@@ -1,5 +1,4 @@
 <?php
-// app/Models/TransactionLog.php
 
 namespace App\Models;
 
@@ -65,18 +64,18 @@ class TransactionLog extends Model
      */
     private function formatValue($value)
     {
-        if ($this->field_name === 'amount' && $value) {
-            return '৳' . number_format($value, 2);
+        if ($this->field_name === 'amount' && $value !== null) {
+            return '৳' . number_format((float) $value, 2);
         }
-        
-        if ($this->field_name === 'paid_status') {
+
+        if ($this->field_name === 'paid_status' && $value !== null) {
             return ucfirst($value);
         }
-        
-        if ($this->field_name === 'payment_method') {
+
+        if ($this->field_name === 'payment_method' && $value !== null) {
             return ucfirst($value);
         }
-        
+
         return $value ?? '<em>Empty</em>';
     }
 
@@ -94,5 +93,19 @@ class TransactionLog extends Model
     public function scopeWithAction($query, $action)
     {
         return $query->where('action', $action);
+    }
+
+    /**
+     * Snapshot helper
+     */
+    public function getSnapshotAttribute($key = null, $default = null)
+    {
+        $snapshot = $this->transaction_snapshot ?? [];
+
+        if ($key === null) {
+            return $snapshot;
+        }
+
+        return data_get($snapshot, $key, $default);
     }
 }

@@ -10,15 +10,20 @@ return new class extends Migration
         Schema::create('donations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('donor_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('name'); // Donor name (either from donor table or manual entry)
-            $table->string('phone')->nullable(); // Phone number
-            $table->decimal('amount', 10, 2);
+            $table->foreignId('contributor_id')->nullable()->constrained()->nullOnDelete();
+            $table->integer('amount');
             $table->enum('paid_status', ['paid', 'unpaid'])->default('unpaid');
             $table->enum('payment_method', ['cash', 'bkash', 'nagad'])->default('cash');
-            $table->text('notes')->nullable(); // Additional notes
+            $table->text('notes')->nullable(); 
             $table->foreignId('user_id')->constrained();
             $table->timestamps();
-            $table->softDeletes(); // For soft delete functionality
+            $table->softDeletes(); 
+            
+            // Optional: Add indexes for better query performance
+            $table->index('donor_id');
+            $table->index('contributor_id');
+            $table->index('paid_status');
+            $table->index('created_at');
         });
     }
 

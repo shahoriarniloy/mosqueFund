@@ -13,29 +13,26 @@ return new class extends Migration
     {
         Schema::create('transaction_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('transaction_id')->constrained()->onDelete('cascade');
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            
-            // Track changes
+
+            $table->foreignId('transaction_id')
+                ->nullable()
+                ->constrained('transactions')
+                ->nullOnDelete();
+
+            $table->foreignId('user_id')
+                ->nullable()
+                ->constrained('users')
+                ->nullOnDelete();
+
             $table->string('field_name')->nullable();
             $table->text('old_value')->nullable();
             $table->text('new_value')->nullable();
-            
-            // Store snapshot of complete transaction data
             $table->json('transaction_snapshot')->nullable();
-            
-            // Action type
-            $table->enum('action', ['created', 'updated', 'deleted', 'restored'])->default('updated');
-            
-            // IP Address and User Agent for tracking
-            $table->string('ip_address', 45)->nullable();
+            $table->enum('action', ['created', 'updated', 'deleted']);
+            $table->string('ip_address')->nullable();
             $table->text('user_agent')->nullable();
-            
+
             $table->timestamps();
-            
-            // Indexes for faster queries
-            $table->index(['transaction_id', 'created_at']);
-            $table->index(['user_id', 'created_at']);
         });
     }
 

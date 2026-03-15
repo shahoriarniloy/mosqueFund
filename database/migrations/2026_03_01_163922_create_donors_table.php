@@ -13,8 +13,13 @@ return new class extends Migration
             $table->string('name');
             $table->string('phone')->unique();
             $table->text('address')->nullable();
-            $table->decimal('monthly_amount', 10, 2)->default(0);
+            $table->integer('monthly_amount')->default(0);
             $table->enum('status', ['active', 'inactive'])->default('active');
+            
+            // Foreign key to users table
+            $table->foreignId('created_by')
+                  ->constrained('users');  // <-- Add semicolon here!
+                  
             $table->timestamps();
         });
     }

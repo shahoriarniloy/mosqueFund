@@ -15,4 +15,4 @@ class EnsureUserIsAuthenticated
         
         return $next($request);
     }
-}a
+}

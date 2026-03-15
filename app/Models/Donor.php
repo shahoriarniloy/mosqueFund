@@ -14,15 +14,27 @@ class Donor extends Model
         'phone',
         'address',
         'monthly_amount',
-        'status'
+        'status',
+        'created_by'  // Added created_by to fillable
     ];
 
     protected $casts = [
-        'monthly_amount' => 'decimal:2'
+        'monthly_amount' => 'int'
     ];
 
+    /**
+     * Get the transactions for this donor.
+     */
     public function transactions()
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /**
+     * Get the user who created this donor record.
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

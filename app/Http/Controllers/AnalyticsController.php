@@ -19,16 +19,12 @@ class AnalyticsController extends Controller implements HasMiddleware
         ];
     }
 
-    /**
-     * Display analytics page with monthly data
-     */
+   
     public function index(Request $request)
     {
-        // Get selected month and year from request or default to current
         $selectedMonth = $request->get('month', now()->month);
         $selectedYear = $request->get('year', now()->year);
         
-        // Get month name for display
         $monthNames = [
             1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
             5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
@@ -36,22 +32,18 @@ class AnalyticsController extends Controller implements HasMiddleware
         ];
         $selectedMonthName = $monthNames[$selectedMonth];
         
-        // Get available years for filter
         $availableYears = collect(range(2020, now()->year))->reverse();
         
-        // Get months list for filter
         $months = Month::orderBy('year', 'desc')
             ->orderByRaw("FIELD(name, 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December')")
             ->get();
         
-        // Get the month_id for selected month/year
         $selectedMonthId = Month::where('name', $selectedMonthName)
             ->where('year', $selectedYear)
             ->value('id');
         
         // ===== DONATIONS DATA =====
-        // Note: Donations don't have month_id, so we still use created_at for them
-        // Alternatively, you could add a month_id to donations table for consistency
+       
         $donations = Donation::with(['donor', 'user'])
             ->whereYear('created_at', $selectedYear)
             ->whereMonth('created_at', $selectedMonth)
@@ -71,7 +63,6 @@ class AnalyticsController extends Controller implements HasMiddleware
         ];
         
         // ===== TRANSACTIONS DATA =====
-        // Using month_id for transactions
         $transactions = Transaction::with(['donor', 'month', 'user'])
             ->where('month_id', $selectedMonthId)
             ->orderBy('created_at', 'desc')

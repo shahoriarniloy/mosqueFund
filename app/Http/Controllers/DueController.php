@@ -38,107 +38,25 @@ class DueController extends Controller implements HasMiddleware
         $currentYear = now()->year;
         $currentMonthName = now()->format('F');
         
-        // Get all months up to current month
-        $allMonths = Month::where(function($query) use ($currentYear, $currentMonth) {
-                // Months from previous years
-                $query->where('year', '<', $currentYear)
-                    // OR months from current year up to current month
-                    ->orWhere(function($q) use ($currentYear, $currentMonth) {
-                        $q->where('year', $currentYear)
-                          ->whereRaw("FIELD(name, 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December') <= ?", [$currentMonth]);
-                    });
-            })
-            ->orderBy('year', 'desc')
-            ->orderByRaw("FIELD(name, 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December')")
-            ->get();
-        
         $dueData = [];
         $totalOverallDue = 0;
         $totalDonorsWithDue = 0;
         
         foreach ($donors as $donor) {
-            // Get paid months for this donor
-            $paidMonthIds = Transaction::where('donor_id', $donor->id)
-                ->where('paid_status', 'paid')
-                ->pluck('month_id')
-                ->toArray();
+            // Calculate due from donor's creation date to current date
+            $donorDueData = $this->calculateDonorDueFromCreation($donor);
             
-            // Calculate due months and amount
-            $donorDueMonths = [];
-            $donorDueAmount = 0;
-            
-            foreach ($allMonths as $month) {
-                if (!in_array($month->id, $paidMonthIds)) {
-                    $dueDate = \Carbon\Carbon::create($month->year, $this->getMonthNumber($month->name), 1);
-                    $daysOverdue = $dueDate->isPast() ? $dueDate->diffInDays(now()) : 0;
-                    
-                    $donorDueMonths[] = [
-                        'month' => $month,
-                        'amount' => $donor->monthly_amount,
-                        'due_date' => $dueDate,
-                        'days_overdue' => $daysOverdue
-                    ];
-                    
-                    $donorDueAmount += $donor->monthly_amount;
-                }
-            }
-            
-            // Get unpaid transactions from database (only for months up to current)
-            $unpaidTransactions = Transaction::where('donor_id', $donor->id)
-                ->where('paid_status', 'unpaid')
-                ->whereHas('month', function($query) use ($currentYear, $currentMonth) {
-                    $query->where(function($q) use ($currentYear, $currentMonth) {
-                        $q->where('year', '<', $currentYear)
-                          ->orWhere(function($sub) use ($currentYear, $currentMonth) {
-                              $sub->where('year', $currentYear)
-                                  ->whereRaw("FIELD(name, 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December') <= ?", [$currentMonth]);
-                          });
-                    });
-                })
-                ->with('month')
-                ->get();
-            
-            foreach ($unpaidTransactions as $transaction) {
-                // Check if this month is already counted
-                $monthExists = false;
-                foreach ($donorDueMonths as $dueMonth) {
-                    if ($dueMonth['month']->id == $transaction->month_id) {
-                        $monthExists = true;
-                        break;
-                    }
-                }
-                
-                if (!$monthExists) {
-                    $dueDate = \Carbon\Carbon::create($transaction->month->year, $this->getMonthNumber($transaction->month->name), 1);
-                    $daysOverdue = $dueDate->isPast() ? $dueDate->diffInDays(now()) : 0;
-                    
-                    $donorDueMonths[] = [
-                        'month' => $transaction->month,
-                        'amount' => $transaction->amount,
-                        'due_date' => $dueDate,
-                        'days_overdue' => $daysOverdue
-                    ];
-                    
-                    $donorDueAmount += $transaction->amount;
-                }
-            }
-            
-            // Sort due months by date (oldest first for overdue priority)
-            usort($donorDueMonths, function($a, $b) {
-                return $a['due_date']->timestamp - $b['due_date']->timestamp;
-            });
-            
-            if ($donorDueAmount > 0) {
+            if ($donorDueData['total_due'] > 0) {
                 $dueData[] = [
                     'donor' => $donor,
-                    'due_months' => $donorDueMonths,
-                    'total_due' => $donorDueAmount,
-                    'due_count' => count($donorDueMonths),
-                    'oldest_due' => $donorDueMonths[0]['due_date'] ?? null,
-                    'max_days_overdue' => max(array_column($donorDueMonths, 'days_overdue'))
+                    'due_months' => $donorDueData['due_months'],
+                    'total_due' => $donorDueData['total_due'],
+                    'due_count' => $donorDueData['due_count'],
+                    'oldest_due' => $donorDueData['oldest_due'],
+                    'max_days_overdue' => $donorDueData['max_days_overdue']
                 ];
                 
-                $totalOverallDue += $donorDueAmount;
+                $totalOverallDue += $donorDueData['total_due'];
                 $totalDonorsWithDue++;
             }
         }
@@ -164,6 +82,112 @@ class DueController extends Controller implements HasMiddleware
     }
     
     /**
+     * Calculate due amount for a donor from their creation date to current date
+     */
+    private function calculateDonorDueFromCreation($donor)
+    {
+        $currentDate = now();
+        $creationDate = \Carbon\Carbon::parse($donor->created_at);
+        
+        // Get all months from creation date to current date
+        $months = $this->getMonthsInRange($creationDate, $currentDate);
+        
+        // Get paid months for this donor
+        $paidMonthIds = Transaction::where('donor_id', $donor->id)
+            ->where('paid_status', 'paid')
+            ->pluck('month_id')
+            ->toArray();
+        
+        // Get unpaid transactions
+        $unpaidTransactions = Transaction::where('donor_id', $donor->id)
+            ->where('paid_status', 'unpaid')
+            ->with('month')
+            ->get();
+        
+        $unpaidMonthIds = $unpaidTransactions->pluck('month_id')->toArray();
+        
+        $dueMonths = [];
+        $totalDue = 0;
+        
+        foreach ($months as $month) {
+            // Check if this month is paid
+            if (in_array($month->id, $paidMonthIds)) {
+                continue;
+            }
+            
+            // Check if this month is already recorded as unpaid in transactions
+            if (in_array($month->id, $unpaidMonthIds)) {
+                // Find the transaction for this month
+                $transaction = $unpaidTransactions->firstWhere('month_id', $month->id);
+                $dueDate = \Carbon\Carbon::create($month->year, $this->getMonthNumber($month->name), 1);
+                $daysOverdue = $dueDate->isPast() ? $dueDate->diffInDays(now()) : 0;
+                
+                $dueMonths[] = [
+                    'month' => $month,
+                    'amount' => $transaction->amount,
+                    'due_date' => $dueDate,
+                    'days_overdue' => $daysOverdue,
+                    'transaction_id' => $transaction->id
+                ];
+                
+                $totalDue += $transaction->amount;
+            } else {
+                // This month is unpaid and no transaction record exists
+                $dueDate = \Carbon\Carbon::create($month->year, $this->getMonthNumber($month->name), 1);
+                $daysOverdue = $dueDate->isPast() ? $dueDate->diffInDays(now()) : 0;
+                
+                $dueMonths[] = [
+                    'month' => $month,
+                    'amount' => $donor->monthly_amount,
+                    'due_date' => $dueDate,
+                    'days_overdue' => $daysOverdue,
+                    'transaction_id' => null
+                ];
+                
+                $totalDue += $donor->monthly_amount;
+            }
+        }
+        
+        // Sort due months by date (oldest first)
+        usort($dueMonths, function($a, $b) {
+            return $a['due_date']->timestamp - $b['due_date']->timestamp;
+        });
+        
+        return [
+            'due_months' => $dueMonths,
+            'total_due' => $totalDue,
+            'due_count' => count($dueMonths),
+            'oldest_due' => !empty($dueMonths) ? $dueMonths[0]['due_date'] : null,
+            'max_days_overdue' => !empty($dueMonths) ? max(array_column($dueMonths, 'days_overdue')) : 0
+        ];
+    }
+    
+    /**
+     * Get all months between two dates
+     */
+    private function getMonthsInRange($startDate, $endDate)
+    {
+        $months = collect();
+        
+        $start = \Carbon\Carbon::parse($startDate)->startOfMonth();
+        $end = \Carbon\Carbon::parse($endDate)->startOfMonth();
+        
+        while ($start <= $end) {
+            $month = Month::where('year', $start->year)
+                ->where('name', $start->format('F'))
+                ->first();
+            
+            if ($month) {
+                $months->push($month);
+            }
+            
+            $start->addMonth();
+        }
+        
+        return $months;
+    }
+    
+    /**
      * Helper function to get month number from name
      */
     private function getMonthNumber($monthName)
@@ -186,7 +210,9 @@ class DueController extends Controller implements HasMiddleware
         return back()->with('info', 'Export feature coming soon!');
     }
 
-
+    /**
+     * Send reminder to a single donor
+     */
     public function sendReminder(Request $request)
     {
         $request->validate([
@@ -202,10 +228,10 @@ class DueController extends Controller implements HasMiddleware
             ]);
         }
 
-        // Calculate due amount for this donor
-        $dueAmount = $this->calculateDonorDue($donor);
+        // Calculate due amount for this donor from creation date
+        $dueData = $this->calculateDonorDueFromCreation($donor);
         
-        if ($dueAmount['total'] <= 0) {
+        if ($dueData['total_due'] <= 0) {
             return response()->json([
                 'success' => false,
                 'message' => 'This donor has no due payments'
@@ -215,8 +241,8 @@ class DueController extends Controller implements HasMiddleware
         // Send SMS using NotificationHelper
         $result = NotificationHelper::sendDueReminder(
             $donor, 
-            $dueAmount['total'], 
-            $dueAmount['months']
+            $dueData['total_due'], 
+            $dueData['due_count']
         );
 
         if ($result['success']) {
@@ -247,11 +273,11 @@ class DueController extends Controller implements HasMiddleware
         foreach ($donors as $donor) {
             if (!$donor->phone) continue;
             
-            $dueAmount = $this->calculateDonorDue($donor);
+            $dueData = $this->calculateDonorDueFromCreation($donor);
             
-            if ($dueAmount['total'] <= 0) continue;
+            if ($dueData['total_due'] <= 0) continue;
             
-            $message = "জনাব {$donor->name}, মসজিদ ফান্ডে আপনার {$dueAmount['months']} মাসের বকেয়া ৳" . number_format($dueAmount['total']) . " টাকা রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। জাযাকাল্লাহু খাইরান।";
+            $message = "জনাব {$donor->name}, মসজিদ ফান্ডে আপনার {$dueData['due_count']} মাসের বকেয়া ৳" . number_format($dueData['total_due']) . " টাকা রয়েছে। অনুগ্রহ করে দ্রুত পরিশোধ করুন। জাযাকাল্লাহু খাইরান।";
             
             $result = $smsService->sendSMS($donor->phone, $message);
             
@@ -279,45 +305,5 @@ class DueController extends Controller implements HasMiddleware
         return redirect()->route('due.index')->with('info', 
             "Bulk reminders sent: {$successCount} successful, {$failCount} failed."
         );
-    }
-
-    /**
-     * Calculate due amount for a specific donor
-     */
-    private function calculateDonorDue($donor)
-    {
-        $currentMonth = now()->month;
-        $currentYear = now()->year;
-        
-        // Get all months up to current month
-        $allMonths = Month::where(function($query) use ($currentYear, $currentMonth) {
-                $query->where('year', '<', $currentYear)
-                    ->orWhere(function($q) use ($currentYear, $currentMonth) {
-                        $q->where('year', $currentYear)
-                          ->whereRaw("FIELD(name, 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December') <= ?", [$currentMonth]);
-                    });
-            })
-            ->get();
-        
-        // Get paid months
-        $paidMonthIds = Transaction::where('donor_id', $donor->id)
-            ->where('paid_status', 'paid')
-            ->pluck('month_id')
-            ->toArray();
-        
-        $dueMonths = 0;
-        $dueAmount = 0;
-        
-        foreach ($allMonths as $month) {
-            if (!in_array($month->id, $paidMonthIds)) {
-                $dueMonths++;
-                $dueAmount += $donor->monthly_amount;
-            }
-        }
-        
-        return [
-            'months' => $dueMonths,
-            'total' => $dueAmount
-        ];
     }
 }
